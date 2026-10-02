@@ -618,6 +618,21 @@ async function exportCSV() {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
     closeExportModal();
 }
+// --- PRINT / HANDOFF REPORT FUNCTION ---
+function generateHandoffReport() {
+    calculate(); // Ensure latest inputs are calculated
+
+    // Check if browser/device supports direct print execution
+    if (typeof window.print === 'function') {
+        try {
+            window.print();
+        } catch (e) {
+            alert("Direct printing is restricted on this mobile device. Use 'Export & Share' to copy or send the report.");
+        }
+    } else {
+        alert("Printing is not supported in this browser mode. Use 'Export & Share' to copy the text summary.");
+    }
+}
 
 </script>
 
