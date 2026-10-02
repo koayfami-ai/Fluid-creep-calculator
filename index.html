@@ -164,11 +164,40 @@
     </div>
 
     <!-- Actions -->
-    <div class="btn-group">
-        <button class="btn btn-primary" onclick="saveLog()" style="flex:1;">Save Log Entry</button>
-        <button class="btn btn-secondary" onclick="exportCSV()" style="flex:1;">Export CSV</button>
-        <button class="btn btn-danger" onclick="clearLogs()" style="flex:0.4;">Clear</button>
+    <!-- Main Action Buttons -->
+<div class="btn-group" style="display: flex; gap: 8px; margin-top: 15px;">
+    <button class="btn btn-primary" onclick="saveLog()" style="flex: 1;">💾 Save Log</button>
+    <button class="btn btn-success" onclick="openExportModal()" style="flex: 1.5; font-weight: bold;">📤 Export & Share</button>
+    <button class="btn btn-secondary" onclick="generateHandoffReport()" style="flex: 1;">🖨️ Print</button>
+    <button class="btn btn-danger" onclick="clearLogs()" style="flex: 0.5;">Clear</button>
+</div>
+
+<!-- Combined Export & Share Modal -->
+<div id="exportModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#1e293b; color:#fff; border-radius:12px; padding:20px; width:90%; max-width:400px; box-shadow:0 10px 25px rgba(0,0,0,0.5); text-align:center;">
+        <h3 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #334155; padding-bottom:10px;">📤 Export & Share Report</h3>
+        
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <button id="btnModalCopy" class="btn btn-primary" onclick="copySummaryToClipboard()" style="padding:12px; text-align:left;">
+                📋 <strong>Copy Text Summary</strong>
+                <div style="font-size:0.75rem; opacity:0.8;">Copy report to clipboard for WhatsApp/Notes</div>
+            </button>
+            
+            <button class="btn btn-primary" onclick="shareSummaryNative()" style="padding:12px; text-align:left; background:#0284c7;">
+                📲 <strong>Share via App</strong>
+                <div style="font-size:0.75rem; opacity:0.8;">Send summary directly to WhatsApp / Telegram</div>
+            </button>
+            
+            <button class="btn btn-secondary" onclick="exportCSV()" style="padding:12px; text-align:left; background:#475569;">
+                📊 <strong>Download CSV Log</strong>
+                <div style="font-size:0.75rem; opacity:0.8;">Save spreadsheet file of saved logs</div>
+            </button>
+        </div>
+
+        <button onclick="closeExportModal()" style="margin-top:15px; background:transparent; border:1px solid #64748b; color:#cbd5e1; width:100%; padding:8px; border-radius:6px; cursor:pointer;">Close</button>
     </div>
+</div>
+
 
     <!-- Local Logs Table -->
     <div class="log-container">
