@@ -433,7 +433,44 @@ function renderLogs() {
     });
 }
 
-function exportCSV() {
+    function exportCSV() {
+    let logs = getLogs();
+
+    // If no logs saved, prompt to save current screen calculation
+    if (logs.length === 0) {
+        if (confirm("No saved logs found. Would you like to save the current calculation and export it?")) {
+            saveLog();
+            logs = getLogs();
+        } else {
+            return;
+        }
+    }
+
+    // Build clean CSV content with escaped quotes
+    let csv = "Time,Bed ID,Weight (kg),Volume (mL),Na Delivery (mmol),Status\n";
+    logs.forEach(r => {
+        const safeBed = (r.bed || '').replace(/"/g, '""');
+        const safeStatus = (r.status || '').replace(/"/g, '""');
+        const safeNa = (r.na || '').replace(/"/g, '""');
+        csv += `"${r.time}","${safeBed}",${r.weight},${r.vol},"${safeNa}","${safeStatus}"\n`;
+    });
+
+    // Create a Blob URL (Required for iOS Safari & Android PWA standalone mode)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `ICU_Fluid_Creep_${new Date().toISOString().slice(0,10)}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Clean up memory URL
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
     const logs = getLogs();
     if (logs.length === 0) return alert("No logs to export!");
 
