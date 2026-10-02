@@ -462,12 +462,118 @@ function renderLogs() {
     });
 }
 
-    function exportCSV() {
-    let logs = getLogs();
+    // --- EXPORT MODAL CONTROLS ---
+function openExportModal() {
+    document.getElementById('exportModal').style.display = 'flex';
+}
 
-    // If no logs saved, prompt to save current screen calculation
-    if (logs.length === 0) {
-        if (confirm("No saved logs found. Would you like to save the current calculation and export it?")) {
+function closeExportModal() {
+    document.getElementById('exportModal').style.display = 'none';
+}
+
+// Helper: Build Formatted Text Summary for WhatsApp/Notes
+function buildTextSummary() {
+    calculate(); // Refresh latest calculation values
+    const patientId = document.getElementById('patientId').value.trim() || 'Unassigned Bed';
+    const targetRate = document.getElementById('naTargetRate').value;
+    const now = new Date();
+    const timeStr = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const percent = Math.round((currentCalculated.na / currentCalculated.limit) * 100);
+
+    let customSummary = '';
+    const customRows = document.querySelectorAll('.custom-drug-row');
+    customRows.forEach(row => {
+        const name = row.querySelector('.custom-name').value || 'Custom Drug';
+        const vol = parseFloat(row.querySelector('.custom-vol').value) || 0;
+        const qty = parseFloat(row.querySelector('.custom-qty').value) || 0;
+        const select = row.querySelector('.custom-diluent');
+        const concName = select.options[select.selectedIndex].text;
+        const rowVol = vol * qty;
+        if (rowVol > 0) customSummary += `• ${name}: ${rowVol} mL (${concName})\n`;
+    });
+
+    return `🏥 ICU SODIUM & FLUID CREEP REPORT
+----------------------------------
+Bed/ID: ${patientId}
+Time: ${timeStr}
+Weight: ${currentCalculated.weight} kg | Na Limit: ${currentCalculated.limit} mmol/d (${targetRate} mmol/kg/d)
+
+📊 CREEP SUMMARY (24h)
+• Total Creep Vol: ${currentCalculated.vol} mL
+• Total Sodium: ${currentCalculated.na} mmol (${percent}% of limit)
+• Status: ${currentCalculated.status}
+
+💧 INTAKE BREAKDOWN
+• Line Flushes: ${getVal('manualFlushes') * 5} mL
+• Minibags: ${getVal('antibioticBags') * 100} mL
+• Noradrenaline: ${getVal('noradSyringes') * 50} mL
+• NG / Enteral Water: ${getVal('ngFlushes')} mL
+${customSummary}`;
+}
+
+// 1. COPY SUMMARY TO CLIPBOARD
+function copySummaryToClipboard() {
+    const summaryText = buildTextSummary();
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(summaryText)
+            .then(showModalCopyFeedback)
+            .catch(() => fallbackCopy(summaryText));
+    } else {
+        fallbackCopy(summaryText);
+    }
+}
+
+function fallbackCopy(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        showModalCopyFeedback();
+    } catch (err) {
+        alert("Copy failed. Please copy manually from the print preview.");
+    }
+    document.body.removeChild(textarea);
+}
+
+function showModalCopyFeedback() {
+    const btn = document.getElementById('btnModalCopy');
+    if (!btn) return;
+    const originalHTML = btn.innerHTML;
+    btn.style.backgroundColor = "#059669";
+    btn.querySelector('strong').innerText = "Copied! ✓";
+    setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.style.backgroundColor = "";
+    }, 2000);
+}
+
+// 2. NATIVE MOBILE SHARE (WhatsApp / Telegram / Messaging)
+async function shareSummaryNative() {
+    const summaryText = buildTextSummary();
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'ICU Sodium & Fluid Report',
+                text: summaryText
+            });
+        } catch (err) {
+            if (err.name !== 'AbortError') copySummaryToClipboard();
+        }
+    } else {
+        copySummaryToClipboard();
+    }
+}
+
+// 3. EXPORT CSV FILE (With Mobile Native File Share Support)
+async function exportCSV() {
+    let logs = getLogs();
+    if (!logs || logs.length === 0) {
+        if (confirm("No saved logs found. Save current calculation and export?")) {
             saveLog();
             logs = getLogs();
         } else {
@@ -475,7 +581,6 @@ function renderLogs() {
         }
     }
 
-    // Build clean CSV content with escaped quotes
     let csv = "Time,Bed ID,Weight (kg),Volume (mL),Na Delivery (mmol),Status\n";
     logs.forEach(r => {
         const safeBed = (r.bed || '').replace(/"/g, '""');
@@ -484,45 +589,36 @@ function renderLogs() {
         csv += `"${r.time}","${safeBed}",${r.weight},${r.vol},"${safeNa}","${safeStatus}"\n`;
     });
 
-    // Create a Blob URL (Required for iOS Safari & Android PWA standalone mode)
+    const fileName = `ICU_Fluid_Creep_${new Date().toISOString().slice(0, 10)}.csv`;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const file = new File([blob], fileName, { type: 'text/csv' });
+
+    // Mobile file sharing
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: 'ICU Sodium & Fluid Log CSV'
+            });
+            closeExportModal();
+            return;
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+        }
+    }
+
+    // Direct browser download fallback
     const url = URL.createObjectURL(blob);
-    
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `ICU_Fluid_Creep_${new Date().toISOString().slice(0,10)}.csv`);
-    
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    // Clean up memory URL
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    closeExportModal();
 }
 
-    const logs = getLogs();
-    if (logs.length === 0) return alert("No logs to export!");
-
-    let csv = "Time,Bed ID,Weight (kg),Volume (mL),Na Delivery (mmol),Status\n";
-    logs.forEach(r => {
-        csv += `${r.time},"${r.bed}",${r.weight},${r.vol},"${r.na}",${r.status}\n`;
-    });
-
-    const link = document.createElement("a");
-    link.href = encodeURI("data:text/csv;charset=utf-8," + csv);
-    link.download = `ICU_Fluid_Creep_${new Date().toISOString().slice(0,10)}.csv`;
-    link.click();
-}
-
-function clearLogs() {
-    if (confirm("Clear local memory logs?")) {
-        localStorage.removeItem('icu_wt_creep_logs');
-        renderLogs();
-    }
-}
-
-calculate();
-renderLogs();
 </script>
 
 </body>
