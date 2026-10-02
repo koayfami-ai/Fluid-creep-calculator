@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICU Fluid & Sodium Creep Calculator - Stacked Breakdown</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; padding: 15px; color: #1e293b; }
+        .card { max-width: 760px; margin: 0 auto; background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        h2 { margin-top: 0; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; font-size: 1.25em; }
+        .section-title { font-weight: bold; font-size: 0.8em; text-transform: uppercase; color: #64748b; margin: 16px 0 6px 0; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+        
+        .form-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-bottom: 8px; background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0; gap: 8px; }
+        .row-label { font-weight: 600; font-size: 0.85em; flex: 2; min-width: 160px; color: #334155; display: flex; align-items: center; gap: 6px; }
+        .row-inputs { flex: 3; display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+        
+        input, select { padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85em; }
+        input[type="number"] { width: 60px; text-align: right; }
+        input[type="text"] { width: 110px; }
+        select { width: 135px; }
+        .unit { font-size: 0.78em; color: #64748b; white-space: nowrap; }
+        
+        .results { background: #0f172a; color: #fff; border-radius: 8px; padding: 14px; margin-top: 16px; }
+        .metric { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.95em; }
+        .metric-bold { font-weight: bold; font-size: 1.1em; color: #38bdf8; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75em; font-weight: bold; display: inline-block; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+        .badge-success { background: #dcfce7; color: #166534; }
+        
+        .chart-container { margin-top: 14px; background: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; height: 260px; }
+        
+        .btn-group { display: flex; gap: 8px; margin-top: 14px; }
+        .btn { padding: 6px 10px; border: none; border-radius: 6px; font-weight: bold; font-size: 0.8em; cursor: pointer; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-add { background: #0d9488; color: white; padding: 4px 8px; font-size: 0.75em; border-radius: 4px; }
+        .btn-preset { background: #e0e7ff; color: #3730a3; padding: 4px 8px; font-size: 0.75em; border-radius: 4px; border: 1px solid #c7d2fe; }
+        .btn-preset:hover { background: #c7d2fe; }
+        .btn-remove { background: #ef4444; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 0.7em; display: flex; align-items: center; justify-content: center; }
+        .btn-secondary { background: #475569; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        
+        .log-container { margin-top: 20px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
+        th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+        th { background: #e2e8f0; color: #334155; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>ICU Fluid & Sodium Creep Calculator</h2>
+    
+    <!-- Patient Parameters & Weight Threshold -->
+    <div class="form-row" style="background: #e0f2fe; border-color: #bae6fd;">
+        <span class="row-label" style="color: #0369a1;">Bed / Patient ID:</span>
+        <div class="row-inputs">
+            <input type="text" id="patientId" placeholder="e.g. Bed 04">
+        </div>
+    </div>
+    
+    <div class="form-row" style="background: #f0fdf4; border-color: #bbf7d0;">
+        <span class="row-label" style="color: #166534;">Weight & Target Na Allowance:</span>
+        <div class="row-inputs">
+            <input type="number" id="patientWeight" value="60" min="20" max="250" oninput="calculate()">
+            <span class="unit">kg @</span>
+            <select id="naTargetRate" onchange="calculate()" style="width: 130px;">
+                <option value="1.0" selected>1.0 mmol/kg/d</option>
+                <option value="1.5">1.5 mmol/kg/d</option>
+                <option value="2.0">2.0 mmol/kg/d</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Section 1: Line Flushes -->
+    <div class="section-title">1. Line Flushes</div>
+    <div class="form-row">
+        <span class="row-label">Manual Syringe Flushes:</span>
+        <div class="row-inputs">
+            <input type="number" id="manualFlushes" value="8" min="0" oninput="calculate()">
+            <span class="unit">× 5 mL</span>
+            <select id="flushDiluent" onchange="calculate()">
+                <option value="154" selected>0.9% NS (154 Na)</option>
+                <option value="140">Balanced (140 Na)</option>
+                <option value="0">Sterile Water (0 Na)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Section 2: Standard Infusions -->
+    <div class="section-title">2. Standard Infusions & Minibags</div>
+    <div class="form-row">
+        <span class="row-label">Antibiotic Minibags:</span>
+        <div class="row-inputs">
+            <input type="number" id="antibioticBags" value="3" min="0" oninput="calculate()">
+            <span class="unit">× 100 mL</span>
+            <select id="abxDiluent" onchange="calculate()">
+                <option value="154" selected>0.9% NS (154 Na)</option>
+                <option value="140">Balanced (140 Na)</option>
+                <option value="0">D5W (0 Na)</option>
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <span class="row-label">Noradrenaline (50 mL):</span>
+        <div class="row-inputs">
+            <input type="number" id="noradSyringes" value="2" min="0" step="0.5" oninput="calculate()">
+            <span class="unit">syringes</span>
+            <select id="noradDiluent" onchange="calculate()">
+                <option value="0">D5W (0 Na)</option>
+                <option value="154" selected>0.9% NS (154 Na)</option>
+                <option value="140">Balanced (140 Na)</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Section 3: Dynamic Custom Drug Entries -->
+    <div class="section-title">
+        <span>3. Custom Drug Entries</span>
+        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            <button class="btn btn-preset" onclick="addCustomDrugPreset('Vasopressin', 50, 1, '154')">+ Vasopressin</button>
+            <button class="btn btn-preset" onclick="addCustomDrugPreset('Sedation', 50, 2, '0')">+ Sedation</button>
+            <button class="btn btn-preset" onclick="addCustomDrugPreset('Insulin', 50, 1, '154')">+ Insulin</button>
+            <button class="btn btn-add" onclick="addCustomDrugPreset('', 50, 1, '0')">+ Blank</button>
+        </div>
+    </div>
+    <div id="customDrugsContainer"></div>
+
+    <!-- Section 4: Enteral Intake -->
+    <div class="section-title">4. Enteral Water Intake</div>
+    <div class="form-row">
+        <span class="row-label">NG Tube Flushes / Free Water:</span>
+        <div class="row-inputs">
+            <input type="number" id="ngFlushes" value="150" min="0" oninput="calculate()">
+            <span class="unit">mL / day</span>
+        </div>
+    </div>
+
+    <!-- Calculated Summary -->
+    <div class="results">
+        <div class="metric">
+            <span>Total 24h Creep Volume:</span>
+            <span id="totalVol" class="metric-bold">0 mL</span>
+        </div>
+        <div class="metric">
+            <span>Total Sodium Delivered:</span>
+            <span id="totalNa" class="metric-bold">0 mmol</span>
+        </div>
+        <div class="metric">
+            <span>Weight-Based Daily Na Limit (<span id="calcLimitLabel">60</span> mmol):</span>
+            <span id="naPercent" class="metric-bold">0%</span>
+        </div>
+        <div class="metric" style="margin-top: 8px; align-items: center;">
+            <span>Sodium Status:</span>
+            <span id="statusBadge" class="badge">--</span>
+        </div>
+    </div>
+
+    <!-- Stacked Sodium Breakdown Chart -->
+    <div class="chart-container">
+        <canvas id="creepChart"></canvas>
+    </div>
+
+    <!-- Actions -->
+    <div class="btn-group">
+        <button class="btn btn-primary" onclick="saveLog()" style="flex:1;">Save Log Entry</button>
+        <button class="btn btn-secondary" onclick="exportCSV()" style="flex:1;">Export CSV</button>
+        <button class="btn btn-danger" onclick="clearLogs()" style="flex:0.4;">Clear</button>
+    </div>
+
+    <!-- Local Logs Table -->
+    <div class="log-container">
+        <div class="section-title">Saved Audit Logs</div>
+        <table id="logTable">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Bed ID</th>
+                    <th>Wt</th>
+                    <th>Vol</th>
+                    <th>Na Delivery</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="logBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+let customDrugCounter = 0;
+let creepChart = null;
+let currentCalculated = { vol: 0, na: 0, status: '', limit: 60, weight: 60 };
+
+function getVal(id) {
+    return parseFloat(document.getElementById(id).value) || 0;
+}
+
+function calculateItemNa(volume, naConc) {
+    return (volume / 1000) * naConc;
+}
+
+function addCustomDrugPreset(name, vol, qty, diluentVal) {
+    customDrugCounter++;
+    const container = document.getElementById('customDrugsContainer');
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'form-row custom-drug-row';
+    rowDiv.id = `custom-row-${customDrugCounter}`;
+    
+    rowDiv.innerHTML = `
+        <span class="row-label">
+            <button class="btn-remove" onclick="removeCustomDrugRow('custom-row-${customDrugCounter}')">✕</button>
+            <input type="text" class="custom-name" value="${name}" placeholder="Drug Name" style="width: 110px;">
+        </span>
+        <div class="row-inputs">
+            <input type="number" class="custom-vol" value="${vol}" min="0" oninput="calculate()">
+            <span class="unit">mL ×</span>
+            <input type="number" class="custom-qty" value="${qty}" min="0" step="0.5" oninput="calculate()">
+            <span class="unit">doses</span>
+            <select class="custom-diluent" onchange="calculate()">
+                <option value="154" ${diluentVal === '154' ? 'selected' : ''}>0.9% NS (154 Na)</option>
+                <option value="140" ${diluentVal === '140' ? 'selected' : ''}>Balanced (140 Na)</option>
+                <option value="0" ${diluentVal === '0' ? 'selected' : ''}>D5W (0 Na)</option>
+            </select>
+        </div>
+    `;
+    container.appendChild(rowDiv);
+    calculate();
+}
+
+function removeCustomDrugRow(rowId) {
+    const element = document.getElementById(rowId);
+    if (element) {
+        element.remove();
+        calculate();
+    }
+}
+
+function renderChart(flushNa, abxNa, noradNa, customNa, maxNaLimit) {
+    const ctx = document.getElementById('creepChart').getContext('2d');
+
+    if (creepChart) {
+        creepChart.data.datasets[0].data = [flushNa, 0];
+        creepChart.data.datasets[1].data = [abxNa, 0];
+        creepChart.data.datasets[2].data = [noradNa, 0];
+        creepChart.data.datasets[3].data = [customNa, 0];
+        creepChart.data.datasets[4].data = [0, maxNaLimit];
+        creepChart.update();
+    } else {
+        creepChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Delivered Sodium', 'Target Limit'],
+                datasets: [
+                    {
+                        label: 'Line Flushes',
+                        data: [flushNa, 0],
+                        backgroundColor: '#3b82f6', // Blue
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Minibags',
+                        data: [abxNa, 0],
+                        backgroundColor: '#8b5cf6', // Purple
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Noradrenaline',
+                        data: [noradNa, 0],
+                        backgroundColor: '#f59e0b', // Amber
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Custom Drugs',
+                        data: [customNa, 0],
+                        backgroundColor: '#ec4899', // Pink
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Target Limit Allowance',
+                        data: [0, maxNaLimit],
+                        backgroundColor: '#94a3b8', // Gray
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { boxWidth: 12, font: { size: 10 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return `${ctx.dataset.label}: ${ctx.raw.toFixed(1)} mmol`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { display: false }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        title: { 
+                            display: true, 
+                            text: 'Sodium (mmol)', 
+                            color: '#475569', 
+                            font: { weight: 'bold', size: 11 } 
+                        },
+                        grid: { color: '#f1f5f9' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+function calculate() {
+    const weight = getVal('patientWeight') || 60;
+    const targetRate = parseFloat(document.getElementById('naTargetRate').value) || 1.0;
+    const maxNaLimit = weight * targetRate;
+    
+    currentCalculated.weight = weight;
+    currentCalculated.limit = Math.round(maxNaLimit);
+    document.getElementById('calcLimitLabel').innerText = Math.round(maxNaLimit);
+
+    const flushVol = getVal('manualFlushes') * 5;
+    const flushNa = calculateItemNa(flushVol, getVal('flushDiluent'));
+
+    const abxVol = getVal('antibioticBags') * 100;
+    const abxNa = calculateItemNa(abxVol, getVal('abxDiluent'));
+
+    const noradVol = getVal('noradSyringes') * 50;
+    const noradNa = calculateItemNa(noradVol, getVal('noradDiluent'));
+
+    const ngVol = getVal('ngFlushes');
+
+    let customVolTotal = 0;
+    let customNaTotal = 0;
+    
+    const customRows = document.querySelectorAll('.custom-drug-row');
+    customRows.forEach(row => {
+        const vol = parseFloat(row.querySelector('.custom-vol').value) || 0;
+        const qty = parseFloat(row.querySelector('.custom-qty').value) || 0;
+        const conc = parseFloat(row.querySelector('.custom-diluent').value) || 0;
+        
+        const totalRowVol = vol * qty;
+        customVolTotal += totalRowVol;
+        customNaTotal += calculateItemNa(totalRowVol, conc);
+    });
+
+    const totalVolume = flushVol + abxVol + noradVol + ngVol + customVolTotal;
+    const totalSodium = flushNa + abxNa + noradNa + customNaTotal;
+    const naPercent = Math.round((totalSodium / maxNaLimit) * 100);
+
+    currentCalculated.vol = Math.round(totalVolume);
+    currentCalculated.na = totalSodium.toFixed(1);
+
+    document.getElementById('totalVol').innerText = `${currentCalculated.vol} mL`;
+    document.getElementById('totalNa').innerText = `${currentCalculated.na} mmol`;
+    document.getElementById('naPercent').innerText = `${naPercent}%`;
+
+    const badge = document.getElementById('statusBadge');
+    if (totalSodium > maxNaLimit * 1.5) {
+        currentCalculated.status = "CRITICAL";
+        badge.innerText = `CRITICAL SODIUM OVERLOAD (>150% Target)`;
+        badge.className = "badge badge-danger";
+    } else if (totalSodium > maxNaLimit) {
+        currentCalculated.status = "HIGH";
+        badge.innerText = `HIGH SODIUM CREEP (>100% Target)`;
+        badge.className = "badge badge-warning";
+    } else {
+        currentCalculated.status = "ACCEPTABLE";
+        badge.innerText = "ACCEPTABLE SODIUM CREEP";
+        badge.className = "badge badge-success";
+    }
+
+    renderChart(flushNa, abxNa, noradNa, customNaTotal, maxNaLimit);
+}
+
+function getLogs() {
+    return JSON.parse(localStorage.getItem('icu_wt_creep_logs') || '[]');
+}
+
+function saveLog() {
+    const patientId = document.getElementById('patientId').value.trim() || 'Unassigned';
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const newEntry = {
+        time: timestamp,
+        bed: patientId,
+        weight: currentCalculated.weight,
+        vol: currentCalculated.vol,
+        na: `${currentCalculated.na} / ${currentCalculated.limit} mmol`,
+        status: currentCalculated.status
+    };
+
+    const logs = getLogs();
+    logs.unshift(newEntry);
+    localStorage.setItem('icu_wt_creep_logs', JSON.stringify(logs));
+    renderLogs();
+}
+
+function renderLogs() {
+    const logs = getLogs();
+    const tbody = document.getElementById('logBody');
+    tbody.innerHTML = '';
+
+    if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#94a3b8;">No saved logs</td></tr>';
+        return;
+    }
+
+    logs.forEach(log => {
+        tbody.innerHTML += `<tr>
+            <td>${log.time}</td>
+            <td><strong>${log.bed}</strong></td>
+            <td>${log.weight} kg</td>
+            <td>${log.vol} mL</td>
+            <td>${log.na}</td>
+            <td>${log.status}</td>
+        </tr>`;
+    });
+}
+
+function exportCSV() {
+    const logs = getLogs();
+    if (logs.length === 0) return alert("No logs to export!");
+
+    let csv = "Time,Bed ID,Weight (kg),Volume (mL),Na Delivery (mmol),Status\n";
+    logs.forEach(r => {
+        csv += `${r.time},"${r.bed}",${r.weight},${r.vol},"${r.na}",${r.status}\n`;
+    });
+
+    const link = document.createElement("a");
+    link.href = encodeURI("data:text/csv;charset=utf-8," + csv);
+    link.download = `ICU_Fluid_Creep_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+}
+
+function clearLogs() {
+    if (confirm("Clear local memory logs?")) {
+        localStorage.removeItem('icu_wt_creep_logs');
+        renderLogs();
+    }
+}
+
+calculate();
+renderLogs();
+</script>
+
+</body>
+</html>
